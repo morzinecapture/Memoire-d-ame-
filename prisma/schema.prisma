@@ -1,0 +1,245 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String? // For email/password auth
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  relatives     Relative[]
+  stories       Story[]
+  books         Book[]
+
+  @@map("users")
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Relative model - the person being interviewed
+model Relative {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  birthDate   DateTime?
+  deathDate   DateTime?
+  relation    String // e.g., "grand-mère", "père", "oncle"
+  bio         String?  @db.Text
+  photoUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  answers     Answer[]
+  stories     Story[]
+  media       Media[]
+
+  @@map("relatives")
+}
+
+// Question model - predefined questions for interviews
+model Question {
+  id          String   @id @default(cuid())
+  text        String   @db.Text
+  category    String // e.g., "enfance", "famille", "carrière"
+  order       Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  answers     Answer[]
+
+  @@map("questions")
+}
+
+// Answer model - audio responses and their processed narratives
+model Answer {
+  id              String   @id @default(cuid())
+  audioUrl        String // S3/MinIO URL
+  audioSize       Int? // bytes
+  audioDuration   Int? // seconds
+  transcript      String?  @db.Text
+  narrativeJson   Json? // Structured narrative with chapters, themes, etc.
+  tags            String[] // Array of tags
+  era             String? // e.g., "1950s", "enfance"
+  theme           String? // e.g., "famille", "guerre", "école"
+  emotion         String? // e.g., "joie", "nostalgie", "tristesse"
+  familyLink      String? // e.g., "père", "grand-mère"
+  processingStatus String  @default("pending") // pending, processing, completed, failed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  questionId      String
+  question        Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  relativeId      String
+  relative        Relative @relation(fields: [relativeId], references: [id], onDelete: Cascade)
+
+  stories         StoryAnswer[]
+  media           Media[]
+
+  @@map("answers")
+}
+
+// Story model - grouped narratives (e.g., by time period, theme)
+model Story {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  coverImageUrl String?
+  era         String? // e.g., "1950-1960"
+  theme       String? // e.g., "Souvenirs d'enfance"
+  order       Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  relativeId  String
+  relative    Relative @relation(fields: [relativeId], references: [id], onDelete: Cascade)
+
+  answers     StoryAnswer[]
+  media       Media[]
+
+  @@map("stories")
+}
+
+// Junction table between Stories and Answers
+model StoryAnswer {
+  id        String   @id @default(cuid())
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  answerId  String
+  answer    Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, answerId])
+  @@map("story_answers")
+}
+
+// Media model - photos, videos, documents
+model Media {
+  id          String   @id @default(cuid())
+  type        String // photo, video, document
+  url         String // S3/MinIO URL
+  thumbnailUrl String?
+  caption     String?  @db.Text
+  metadata    Json? // EXIF data, etc.
+  size        Int? // bytes
+  mimeType    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  relativeId  String?
+  relative    Relative? @relation(fields: [relativeId], references: [id], onDelete: Cascade)
+
+  answerId    String?
+  answer      Answer? @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  storyId     String?
+  story       Story? @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  bookMedia   BookMedia[]
+
+  @@map("media")
+}
+
+// Book model - annual compiled PDFs
+model Book {
+  id          String   @id @default(cuid())
+  year        Int
+  title       String
+  pdfUrl      String? // S3/MinIO URL once generated
+  coverImageUrl String?
+  status      String   @default("draft") // draft, generating, completed, failed
+  metadata    Json? // TOC, stats, etc.
+  generatedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  media       BookMedia[]
+
+  @@unique([userId, year])
+  @@map("books")
+}
+
+// Junction table between Books and Media
+model BookMedia {
+  id        String   @id @default(cuid())
+  order     Int      @default(0)
+  page      Int? // Page number in the book
+  createdAt DateTime @default(now())
+
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  mediaId   String
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, mediaId])
+  @@map("book_media")
+}
