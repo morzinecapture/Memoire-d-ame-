@@ -100,7 +100,7 @@ export default async function WeeklyQuestionsPage() {
             Toutes les questions de cette semaine
           </h2>
           <ul className="space-y-4">
-            {questions.map((q, index) => (
+            {questions.map((q: (typeof questions)[number], index: number) => (
               <li
                 key={q.id}
                 className="flex items-start space-x-4 rounded-lg border border-gray-200 p-4 transition hover:bg-gray-50"

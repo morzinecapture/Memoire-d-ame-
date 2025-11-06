@@ -177,8 +177,10 @@ function generateChapterHTML(chapter: Chapter, chapterNumber: number): string {
         <div class="answer">
           ${answer.transcript ? `<p class="transcript">${answer.transcript}</p>` : ''}
           ${
-            answer.narrativeJson?.summary
-              ? `<p class="summary">${answer.narrativeJson.summary}</p>`
+            answer.narrativeJson &&
+            typeof answer.narrativeJson === 'object' &&
+            'summary' in answer.narrativeJson
+              ? `<p class="summary">${(answer.narrativeJson as { summary: string }).summary}</p>`
               : ''
           }
           ${

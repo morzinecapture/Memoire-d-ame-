@@ -143,7 +143,7 @@ export const audioWorker = new Worker<AudioProcessingJobData>(
         where: { id: answerId },
         data: {
           transcript: cleanedTranscript,
-          narrativeJson: narrative,
+          narrativeJson: narrative as never,
           tags,
           era,
           theme,
